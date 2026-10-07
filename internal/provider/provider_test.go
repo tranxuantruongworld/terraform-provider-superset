@@ -32,12 +32,13 @@ func TestProviderResourcesAndDataSources(t *testing.T) {
 	p := New("test")()
 
 	resources := p.Resources(context.Background())
-	if len(resources) != 2 {
-		t.Errorf("expected 2 resources, got %d", len(resources))
+	if len(resources) != 3 {
+		t.Errorf("expected 3 resources, got %d", len(resources))
 	}
 
 	dataSources := p.DataSources(context.Background())
-	if len(dataSources) != 2 {
-		t.Errorf("expected 2 data sources, got %d", len(dataSources))
+	if len(dataSources) != 3 {
+		t.Errorf("expected 3 data sources, got %d", len(dataSources))
 	}
 }
+

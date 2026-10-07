@@ -13,28 +13,75 @@ provider "superset" {
   insecure = true
 }
 
-# 1. Truy vấn role có sẵn trong Superset (ví dụ role Gamma cho người xem báo cáo)
+# ==============================================================================
+# FEATURE 4: TRUY VẤN PERMISSIONS CÓ SẴN (Permission View Menus - PVM)
+# ==============================================================================
+# Truy vấn quyền đọc Dashboard
+data "superset_permission" "can_read_dashboard" {
+  permission_name = "can_read"
+  view_menu_name   = "Dashboard"
+}
+
+# Truy vấn quyền truy cập tất cả datasources (hoặc theo schema/database cụ thể)
+data "superset_permission" "all_datasource_access" {
+  permission_name = "all_datasource_access"
+  view_menu_name   = "all_datasource_access"
+}
+
+# Truy vấn role Gamma mặc định của Superset
 data "superset_role" "gamma" {
   name = "Gamma"
 }
 
-# 2. Định nghĩa các Role mới (nhóm quyền) theo chuẩn RBAC
+# ==============================================================================
+# FEATURE 1: TẠO ROLE VÀ GÁN PERMISSIONS CHI TIẾT
+# ==============================================================================
 resource "superset_role" "finance_analyst" {
   name = "Finance_Analyst"
+
+  # Gán danh sách permission IDs trực tiếp vào Role
+  permissions = [
+    data.superset_permission.can_read_dashboard.id,
+    data.superset_permission.all_datasource_access.id,
+  ]
 }
 
 resource "superset_role" "data_engineer" {
   name = "Data_Engineer"
+  permissions = [
+    data.superset_permission.can_read_dashboard.id,
+  ]
 }
 
-# 3. Tạo User và phân quyền (gán Roles) trực tiếp qua Terraform
-resource "superset_user" "analyst_user" {
-  username   = "john.analyst"
-  first_name = "John"
-  last_name  = "Doe"
-  email      = "john.analyst@company.com"
-  password   = "SuperSecret123!"
-  active     = true
+# ==============================================================================
+# FEATURE 2: ROW-LEVEL SECURITY (RLS) - PHÂN QUYỀN TRUY CẬP THEO DÒNG DỮ LIỆU
+# ==============================================================================
+# Luật RLS: Chỉ cho phép người dùng thuộc role Finance_Analyst xem các dòng của Việt Nam
+resource "superset_row_level_security" "vn_finance_filter" {
+  name        = "VN_Finance_Data_Only"
+  description = "Chi xem du lieu doanh thu tai Viet Nam cho Finance Analyst"
+  filter_type = "Regular" # Regular: ap dung cho roles duoc chi dinh; Base: ap dung cho tat ca tru roles duoc chi dinh
+  clause      = "country = 'VN' AND department = 'finance'"
+
+  # ID cua bang / dataset trong Superset
+  tables = [1]
+
+  # Gán luật RLS này vào role Finance_Analyst
+  roles = [
+    superset_role.finance_analyst.id,
+  ]
+}
+
+# ==============================================================================
+# QUẢN LÝ USER VỚI SSO / UPN (Azure AD, GitLab, Vault, Keycloak)
+# ==============================================================================
+# Người dùng chỉ cần khai báo UPN, hệ thống tự động:
+# 1. Trích xuất username = UPN
+# 2. Email = UPN
+# 3. Tự tạo mật khẩu tạm thời ngẫu nhiên (vì xác thực ủy quyền qua SSO/OIDC)
+# 4. Phân quyền sẵn các Role khi user đăng nhập SSO lần đầu tiên
+resource "superset_user" "sso_analyst" {
+  upn = "nguyen.van.a@company.com"
 
   roles = [
     data.superset_role.gamma.id,
@@ -42,24 +89,33 @@ resource "superset_user" "analyst_user" {
   ]
 }
 
-resource "superset_user" "engineer_user" {
-  username   = "alice.engineer"
-  first_name = "Alice"
-  last_name  = "Smith"
-  email      = "alice.engineer@company.com"
-  password   = "SuperSecret456!"
-  active     = true
+resource "superset_user" "sso_engineer" {
+  upn = "alex.data@company.com"
 
   roles = [
     superset_role.data_engineer.id,
   ]
 }
 
-# Outputs
-output "analyst_user_id" {
-  value = superset_user.analyst_user.id
+# User tạo truyền thống (Local Database User)
+resource "superset_user" "local_admin_backup" {
+  username   = "backup_admin"
+  first_name = "Backup"
+  last_name  = "Admin"
+  email      = "backup@company.com"
+  password   = "VeryStrongPassword123!"
+  active     = true
+
+  roles = [
+    data.superset_role.gamma.id,
+  ]
 }
 
-output "engineer_user_id" {
-  value = superset_user.engineer_user.id
+# Outputs
+output "sso_user_id" {
+  value = superset_user.sso_analyst.id
+}
+
+output "rls_rule_id" {
+  value = superset_row_level_security.vn_finance_filter.id
 }

@@ -29,8 +29,9 @@ type roleResource struct {
 }
 
 type roleResourceModel struct {
-	ID   types.String `tfsdk:"id"`
-	Name types.String `tfsdk:"name"`
+	ID          types.String `tfsdk:"id"`
+	Name        types.String `tfsdk:"name"`
+	Permissions types.List   `tfsdk:"permissions"`
 }
 
 func (r *roleResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -39,7 +40,7 @@ func (r *roleResource) Metadata(ctx context.Context, req resource.MetadataReques
 
 func (r *roleResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a role within Apache Superset.",
+		Description: "Manages a role and its permission view menus (PVM) within Apache Superset.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "Numeric identifier of the role as a string.",
@@ -51,6 +52,12 @@ func (r *roleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			"name": schema.StringAttribute{
 				Description: "Name of the role (e.g., 'Finance_Analyst', 'Data_Engineer').",
 				Required:    true,
+			},
+			"permissions": schema.ListAttribute{
+				Description: "List of permission view menu (PVM) IDs assigned to this role.",
+				ElementType: types.Int64Type,
+				Optional:    true,
+				Computed:    true,
 			},
 		},
 	}
@@ -79,8 +86,18 @@ func (r *roleResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	var permIDs []int64
+	if !plan.Permissions.IsNull() && !plan.Permissions.IsUnknown() {
+		diags = plan.Permissions.ElementsAs(ctx, &permIDs, false)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	createReq := &client.CreateRoleRequest{
-		Name: plan.Name.ValueString(),
+		Name:        plan.Name.ValueString(),
+		Permissions: permIDs,
 	}
 
 	role, err := r.client.CreateRole(ctx, createReq)
@@ -94,6 +111,14 @@ func (r *roleResource) Create(ctx context.Context, req resource.CreateRequest, r
 
 	plan.ID = types.StringValue(strconv.FormatInt(role.ID, 10))
 	plan.Name = types.StringValue(role.Name)
+
+	var currentPermIDs []int64
+	for _, p := range role.Permissions {
+		currentPermIDs = append(currentPermIDs, p.ID)
+	}
+	permsVal, diags := types.ListValueFrom(ctx, types.Int64Type, currentPermIDs)
+	resp.Diagnostics.Append(diags...)
+	plan.Permissions = permsVal
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -128,6 +153,14 @@ func (r *roleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	state.Name = types.StringValue(role.Name)
 
+	var permIDs []int64
+	for _, p := range role.Permissions {
+		permIDs = append(permIDs, p.ID)
+	}
+	permsVal, diags := types.ListValueFrom(ctx, types.Int64Type, permIDs)
+	resp.Diagnostics.Append(diags...)
+	state.Permissions = permsVal
+
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }
@@ -146,8 +179,18 @@ func (r *roleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
+	var permIDs []int64
+	if !plan.Permissions.IsNull() && !plan.Permissions.IsUnknown() {
+		diags = plan.Permissions.ElementsAs(ctx, &permIDs, false)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	updateReq := &client.UpdateRoleRequest{
-		Name: plan.Name.ValueString(),
+		Name:        plan.Name.ValueString(),
+		Permissions: permIDs,
 	}
 
 	role, err := r.client.UpdateRole(ctx, id, updateReq)
@@ -160,6 +203,14 @@ func (r *roleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	plan.Name = types.StringValue(role.Name)
+
+	var currentPermIDs []int64
+	for _, p := range role.Permissions {
+		currentPermIDs = append(currentPermIDs, p.ID)
+	}
+	permsVal, diags := types.ListValueFrom(ctx, types.Int64Type, currentPermIDs)
+	resp.Diagnostics.Append(diags...)
+	plan.Permissions = permsVal
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)

@@ -21,3 +21,4 @@ clean:
 install: build
 	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/xtruong/superset/$(VERSION)/linux_amd64/
 	cp $(BINARY) ~/.terraform.d/plugins/registry.terraform.io/xtruong/superset/$(VERSION)/linux_amd64/
+

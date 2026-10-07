@@ -25,11 +25,36 @@ type RoleRef struct {
 	Name string `json:"name,omitempty"`
 }
 
-// PermissionRef represents a permission view menu reference
-type PermissionRef struct {
-	ID         int64  `json:"id"`
-	Permission string `json:"permission_name,omitempty"`
-	ViewMenu   string `json:"view_menu_name,omitempty"`
+// NamedEntity represents an entity with ID and Name
+type NamedEntity struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// TableRef represents a dataset/table reference in RLS
+type TableRef struct {
+	ID        int64  `json:"id"`
+	TableName string `json:"table_name,omitempty"`
+	Schema    string `json:"schema,omitempty"`
+}
+
+// PermissionViewMenu represents a permission-resource pair in Superset (FAB)
+type PermissionViewMenu struct {
+	ID         int64       `json:"id"`
+	Permission NamedEntity `json:"permission"`
+	ViewMenu   NamedEntity `json:"view_menu"`
+}
+
+// PermissionViewMenuListResponse represents response from /api/v1/security/permissions-resources/
+type PermissionViewMenuListResponse struct {
+	Count  int                  `json:"count"`
+	Result []PermissionViewMenu `json:"result"`
+}
+
+// PermissionViewMenuResponse represents single response
+type PermissionViewMenuResponse struct {
+	ID     int64              `json:"id"`
+	Result PermissionViewMenu `json:"result"`
 }
 
 // User represents a Superset user model
@@ -79,9 +104,9 @@ type UserListResponse struct {
 
 // Role represents a Superset role
 type Role struct {
-	ID          int64           `json:"id"`
-	Name        string          `json:"name"`
-	Permissions []PermissionRef `json:"permissions,omitempty"`
+	ID          int64                `json:"id"`
+	Name        string               `json:"name"`
+	Permissions []PermissionViewMenu `json:"permissions,omitempty"`
 }
 
 // CreateRoleRequest represents the payload to create a role
@@ -106,6 +131,49 @@ type RoleResponse struct {
 type RoleListResponse struct {
 	Count  int    `json:"count"`
 	Result []Role `json:"result"`
+}
+
+// RowLevelSecurityRule represents an RLS filter rule in Superset
+type RowLevelSecurityRule struct {
+	ID          int64      `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	FilterType  string     `json:"filter_type"`
+	Clause      string     `json:"clause"`
+	Tables      []TableRef `json:"tables,omitempty"`
+	Roles       []RoleRef  `json:"roles,omitempty"`
+}
+
+// CreateRLSRequest represents the payload to create an RLS rule
+type CreateRLSRequest struct {
+	Name        string  `json:"name"`
+	Description string  `json:"description,omitempty"`
+	FilterType  string  `json:"filter_type"`
+	Clause      string  `json:"clause"`
+	Tables      []int64 `json:"tables"`
+	Roles       []int64 `json:"roles,omitempty"`
+}
+
+// UpdateRLSRequest represents the payload to update an RLS rule
+type UpdateRLSRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	FilterType  *string `json:"filter_type,omitempty"`
+	Clause      *string `json:"clause,omitempty"`
+	Tables      []int64 `json:"tables,omitempty"`
+	Roles       []int64 `json:"roles,omitempty"`
+}
+
+// RLSResponse represents single RLS response
+type RLSResponse struct {
+	ID     int64                `json:"id,omitempty"`
+	Result RowLevelSecurityRule `json:"result"`
+}
+
+// RLSListResponse represents list RLS response
+type RLSListResponse struct {
+	Count  int                    `json:"count"`
+	Result []RowLevelSecurityRule `json:"result"`
 }
 
 // APIError represents an error response from Superset REST API

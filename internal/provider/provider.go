@@ -125,6 +125,7 @@ func (p *SupersetProvider) Resources(ctx context.Context) []func() resource.Reso
 	return []func() resource.Resource{
 		NewUserResource,
 		NewRoleResource,
+		NewRowLevelSecurityResource,
 	}
 }
 
@@ -132,5 +133,7 @@ func (p *SupersetProvider) DataSources(ctx context.Context) []func() datasource.
 	return []func() datasource.DataSource{
 		NewUserDataSource,
 		NewRoleDataSource,
+		NewPermissionDataSource,
 	}
 }
+

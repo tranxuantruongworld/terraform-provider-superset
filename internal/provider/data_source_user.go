@@ -146,3 +146,4 @@ func (d *userDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	diags = resp.State.Set(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 }
+

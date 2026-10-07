@@ -10,12 +10,11 @@ Dự án mã nguồn mở **Terraform Provider for Apache Superset** được x�
 
 ## 🚀 Tính Năng Chính
 
-- **Quản lý Role (`superset_role`)**: Tạo, cập nhật và xóa các vai trò tùy chỉnh (ví dụ: `Finance_Analyst`, `Data_Engineer`, `Marketing_Viewer`).
-- **Quản lý User & Phân quyền (`superset_user`)**: Quản lý tài khoản người dùng, mật khẩu, trạng thái kích hoạt, và gán các role tương ứng.
-- **Truy vấn Data Sources**:
-  - `data.superset_role`: Truy vấn các role có sẵn của Superset (`Admin`, `Alpha`, `Gamma`, `Public`, `sql_lab`, v.v.) theo tên hoặc ID.
-  - `data.superset_user`: Truy vấn thông tin người dùng theo `username` hoặc `id`.
-- **Hỗ trợ REST API & CSRF**: Tự động xác thực JWT qua `/api/v1/security/login`, tự động lấy và gắn header `X-CSRFToken` khi gọi các mutation API.
+- **Quản lý Role & Permissions (`superset_role`)**: Tạo và phân quyền chi tiết cho Role thông qua danh sách `permissions` (Permission View Menus - PVM).
+- **Row-Level Security (`superset_row_level_security`)**: Quản lý các bộ lọc dữ liệu theo dòng (RLS) bằng câu lệnh SQL linh hoạt (`clause`), gắn với bảng (`tables`) và các nhóm quyền (`roles`).
+- **Data Source Tra cứu Quyền (`data.superset_permission`)**: Tra cứu ID của các Permission View Menu theo cặp `(permission_name, view_menu_name)` như `can_read` trên `Dashboard`, `all_datasource_access`, v.v.
+- **Quản lý User & Hỗ trợ SSO/UPN (`superset_user`)**: Hỗ trợ pre-provisioning tài khoản qua **UPN (User Principal Name)** cho người dùng đăng nhập qua Single Sign-On (Azure AD, GitLab, Vault, Keycloak). Chỉ cần khai báo `upn` và `roles`, hệ thống sẽ tự động cấu hình sẵn sàng.
+- **Tự động xác thực REST API & CSRF**: Xác thực JWT token qua `/api/v1/security/login`, tự động lấy và truyền token `X-CSRFToken` cho mọi thao tác POST/PUT/DELETE.
 
 ---
 
@@ -24,28 +23,32 @@ Dự án mã nguồn mở **Terraform Provider for Apache Superset** được x�
 ```text
 terraform-provider-superset/
 ├── internal/
-│   ├── client/              # Superset REST API Client (Auth, Users, Roles, CSRF)
+│   ├── client/                  # Superset REST API Client (Auth, Users, Roles, PVM, RLS, CSRF)
 │   │   ├── client.go
-│   │   ├── client_test.go   # Unit test giả lập Superset server
-│   │   ├── models.go        # Dữ liệu JSON models
-│   │   ├── roles.go         # API methods cho Roles
-│   │   └── users.go         # API methods cho Users
-│   └── provider/            # Triển khai Terraform Plugin Framework
-│       ├── provider.go       # Provider schema & configure
-│       ├── provider_test.go  # Kiểm thử Provider schema
-│       ├── resource_role.go  # Resource superset_role
-│       ├── resource_user.go  # Resource superset_user
-│       ├── data_source_role.go # Data source superset_role
-│       └── data_source_user.go # Data source superset_user
+│   │   ├── client_test.go       # Unit test giả lập HTTP server
+│   │   ├── models.go            # Models dữ liệu JSON
+│   │   ├── permissions.go       # API query Permission View Menus
+│   │   ├── rls.go               # API CRUD Row-Level Security
+│   │   ├── roles.go             # API CRUD Roles
+│   │   └── users.go             # API CRUD Users
+│   └── provider/                # Triển khai Terraform Plugin Framework
+│       ├── provider.go           # Cấu hình Provider
+│       ├── provider_test.go      # Kiểm thử Provider schema
+│       ├── resource_role.go      # Resource superset_role (kèm permissions)
+│       ├── resource_row_level_security.go # Resource superset_row_level_security
+│       ├── resource_user.go      # Resource superset_user (hỗ trợ UPN SSO)
+│       ├── data_source_permission.go # Data source superset_permission
+│       ├── data_source_role.go   # Data source superset_role
+│       └── data_source_user.go   # Data source superset_user
 ├── examples/
-│   ├── dev.tfrc             # Cấu hình dev_overrides cho Terraform CLI chạy local
-│   └── main.tf              # Ví dụ mẫu triển khai phân quyền Superset
-├── Makefile                 # Lệnh build, test, format, install
-├── main.go                  # Điểm khởi chạy của Terraform Provider plugin
+│   ├── dev.tfrc                 # Cấu hình dev_overrides cho Terraform CLI chạy local
+│   └── main.tf                  # Ví dụ hoàn chỉnh về RBAC, RLS và UPN SSO
+├── Makefile                     # Build, test, format, install
+├── main.go                      # Điểm khởi chạy của Terraform Provider plugin
 ├── go.mod
 ├── go.sum
 ├── .gitignore
-├── LICENSE                  # Apache 2.0
+├── LICENSE                      # Apache 2.0
 └── README.md
 ```
 
@@ -53,11 +56,10 @@ terraform-provider-superset/
 
 ## 🛠 Yêu Cầu Cài Đặt (Prerequisites)
 
-Dự án đã được thiết lập với phiên bản mới nhất:
 - **Go**: `1.27.1` (kiểm tra bằng `go version`)
 - **Terraform**: `1.16.5` (kiểm tra bằng `terraform version`)
 
-Cả 2 công cụ đã được cài đặt vào `~/.local/bin` (đã nằm sẵn trong `$PATH` hệ thống).
+Cả 2 công cụ đã được cài đặt vào `~/.local/bin` (nằm sẵn trong `$PATH` hệ thống).
 
 ---
 
@@ -69,7 +71,6 @@ cd /home/xtruong/Desktop/open-source/terraform-provider-superset
 make build
 # hoặc: go build -o terraform-provider-superset .
 ```
-Lệnh trên sẽ sinh ra file nhị phân `terraform-provider-superset`.
 
 ### 2. Chạy Unit Tests
 ```bash
@@ -79,32 +80,65 @@ make test
 
 ---
 
-## 📖 Hướng Dẫn Sử Dụng Local (Development Overrides)
+## 🔐 Phân Tích SSO: Cách Superset Nhận Biết UPN Để Phân Quyền
 
-Để kiểm thử provider trực tiếp với Terraform mà không cần xuất bản lên Terraform Registry, sử dụng tính năng `dev_overrides` có sẵn trong file `examples/dev.tfrc`.
+Khi người dùng hoặc service đăng nhập vào Superset qua các dịch vụ Identity Provider (IdP) như **Azure AD / Microsoft Entra ID**, **GitLab**, **HashiCorp Vault**, hoặc **Keycloak**:
 
-### Bước 1: Khởi chạy / chuẩn bị Superset
-Đảm bảo bạn có tài khoản Admin của Superset (mặc định username `admin`, password `admin`).
+1. **Cơ chế hoạt động**:
+   - Khi đăng nhập SSO qua OAuth2/OIDC, IdP trả về một chuỗi payload chứa các claims định danh người dùng:
+     - **Azure AD (Entra ID)**: gửi thuộc tính `userPrincipalName` hoặc `upn` (ví dụ `nguyen.van.a@company.com`).
+     - **GitLab**: gửi `preferred_username` hoặc `email`.
+     - **Vault / Keycloak**: gửi `upn`, `preferred_username`, hoặc `email`.
+   - Trong `superset_config.py`, lớp `CustomSecurityManager` của Flask-AppBuilder (FAB) sẽ ánh xạ thuộc tính này vào trường `username` của Superset.
 
-### Bước 2: Thiết lập biến môi trường
-```bash
-export TF_CLI_CONFIG_FILE="/home/xtruong/Desktop/open-source/terraform-provider-superset/examples/dev.tfrc"
-export SUPERSET_BASE_URL="http://localhost:8088"
-export SUPERSET_USERNAME="admin"
-export SUPERSET_PASSWORD="your_admin_password"
-```
+2. **Cách kết hợp với Terraform**:
+   - DevOps / Platform Admin khai báo user trước trong Terraform chỉ với **`upn`**:
+     ```hcl
+     resource "superset_user" "analyst" {
+       upn   = "nguyen.van.a@company.com"
+       roles = [superset_role.finance_analyst.id]
+     }
+     ```
+   - Terraform Provider sẽ tự động:
+     - Đặt `username = upn` (`nguyen.van.a@company.com`).
+     - Đặt `email = upn`.
+     - Tự sinh mật khẩu tạm thời ngẫu nhiên an toàn (vì user xác thực bằng SSO Token thay vì mật khẩu DB cục bộ).
+     - Gán sẵn các Role và RLS tương ứng vào User.
+   - Khi người dùng đăng nhập lần đầu tiên qua Azure/GitLab/Vault, Superset tìm thấy User có `username` trùng với `upn` và lập tức áp dụng ngay toàn bộ quyền mà bạn đã cấu hình qua Terraform mà không cần can thiệp thủ công!
 
-### Bước 3: Áp dụng cấu hình Terraform
-Vào thư mục `examples`:
-```bash
-cd examples
-terraform plan
-terraform apply
+3. **Mẫu cấu hình trong `superset_config.py`**:
+```python
+from superset.security import SupersetSecurityManager
+
+class CustomSsoSecurityManager(SupersetSecurityManager):
+    def oauth_user_info(self, provider, response=None):
+        if provider == 'azure':
+            data = self.appbuilder.sm.oauth_remotes[provider].get('me').json()
+            # UPN là thuộc tính định danh chính xác nhất trong Azure AD
+            upn = data.get('userPrincipalName') or data.get('upn') or data.get('mail')
+            return {
+                'username': upn,  # Khớp với 'upn' khai báo trong Terraform
+                'email': data.get('mail') or upn,
+                'first_name': data.get('givenName') or upn.split('@')[0],
+                'last_name': data.get('surname') or 'SSO',
+            }
+        elif provider in ('gitlab', 'vault', 'keycloak'):
+            data = self.appbuilder.sm.oauth_remotes[provider].get('user').json()
+            upn = data.get('preferred_username') or data.get('email')
+            return {
+                'username': upn,
+                'email': data.get('email') or upn,
+                'first_name': data.get('name', 'SSO User'),
+                'last_name': 'SSO',
+            }
+        return {}
+
+CUSTOM_SECURITY_MANAGER = CustomSsoSecurityManager
 ```
 
 ---
 
-## 💡 Ví Dụ Mẫu Cấu Hình HCL (`examples/main.tf`)
+## 💡 Ví Dụ Mẫu Cấu Hình HCL Đầy Đủ (`examples/main.tf`)
 
 ```hcl
 terraform {
@@ -122,46 +156,39 @@ provider "superset" {
   insecure = true
 }
 
-# 1. Truy vấn các role có sẵn của Superset
-data "superset_role" "gamma" {
-  name = "Gamma"
+# 1. Truy vấn các permission cụ thể
+data "superset_permission" "read_dashboard" {
+  permission_name = "can_read"
+  view_menu_name   = "Dashboard"
 }
 
-# 2. Tạo role mới cho phòng ban
+data "superset_permission" "all_datasource" {
+  permission_name = "all_datasource_access"
+  view_menu_name   = "all_datasource_access"
+}
+
+# 2. Tạo Role và gán permissions chi tiết
 resource "superset_role" "finance_analyst" {
   name = "Finance_Analyst"
-}
-
-resource "superset_role" "data_engineer" {
-  name = "Data_Engineer"
-}
-
-# 3. Tạo User và phân quyền (gán Roles)
-resource "superset_user" "analyst_user" {
-  username   = "john.analyst"
-  first_name = "John"
-  last_name  = "Doe"
-  email      = "john.analyst@company.com"
-  password   = "SuperSecret123!"
-  active     = true
-
-  roles = [
-    data.superset_role.gamma.id,
-    superset_role.finance_analyst.id,
+  permissions = [
+    data.superset_permission.read_dashboard.id,
+    data.superset_permission.all_datasource.id,
   ]
 }
 
-resource "superset_user" "engineer_user" {
-  username   = "alice.engineer"
-  first_name = "Alice"
-  last_name  = "Smith"
-  email      = "alice.engineer@company.com"
-  password   = "SuperSecret456!"
-  active     = true
+# 3. Định nghĩa Row-Level Security (RLS)
+resource "superset_row_level_security" "vn_finance_data" {
+  name        = "VN_Finance_Only"
+  filter_type = "Regular"
+  clause      = "country = 'VN' AND department = 'finance'"
+  tables      = [1] # Dataset ID
+  roles       = [superset_role.finance_analyst.id]
+}
 
-  roles = [
-    superset_role.data_engineer.id,
-  ]
+# 4. Phân quyền User qua UPN (Single Sign-On)
+resource "superset_user" "sso_analyst" {
+  upn   = "nguyen.van.a@company.com"
+  roles = [superset_role.finance_analyst.id]
 }
 ```
 

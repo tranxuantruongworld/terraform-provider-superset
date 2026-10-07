@@ -2,8 +2,10 @@ package provider
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -31,6 +33,7 @@ type userResource struct {
 
 type userResourceModel struct {
 	ID        types.String `tfsdk:"id"`
+	UPN       types.String `tfsdk:"upn"`
 	Username  types.String `tfsdk:"username"`
 	FirstName types.String `tfsdk:"first_name"`
 	LastName  types.String `tfsdk:"last_name"`
@@ -46,7 +49,7 @@ func (r *userResource) Metadata(ctx context.Context, req resource.MetadataReques
 
 func (r *userResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a user and their role memberships within Apache Superset.",
+		Description: "Manages a user and their role memberships within Apache Superset. Supports SSO pre-provisioning via UPN (User Principal Name) for Azure AD, GitLab, Vault, and Keycloak.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "Numeric identifier of the user as a string.",
@@ -55,24 +58,33 @@ func (r *userResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"upn": schema.StringAttribute{
+				Description: "User Principal Name (UPN) from SSO IdP (e.g., 'user@domain.com'). If set, 'username', 'email', and names are automatically derived if not provided.",
+				Optional:    true,
+				Computed:    true,
+			},
 			"username": schema.StringAttribute{
-				Description: "Unique username for the user.",
-				Required:    true,
+				Description: "Unique username for the user. Defaults to 'upn' if omitted.",
+				Optional:    true,
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"first_name": schema.StringAttribute{
-				Description: "First name of the user.",
-				Required:    true,
+				Description: "First name of the user. Automatically derived from UPN if not provided.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"last_name": schema.StringAttribute{
-				Description: "Last name of the user.",
-				Required:    true,
+				Description: "Last name of the user. Automatically derived from UPN if not provided.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"email": schema.StringAttribute{
-				Description: "User's email address.",
-				Required:    true,
+				Description: "User's email address. Defaults to 'upn' if omitted.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"active": schema.BoolAttribute{
 				Description: "Whether the user account is active. Defaults to true.",
@@ -81,8 +93,9 @@ func (r *userResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 				Default:     booldefault.StaticBool(true),
 			},
 			"password": schema.StringAttribute{
-				Description: "Password for the user. Only sent on creation or password update.",
+				Description: "Password for the user. For SSO users, if omitted, a secure random placeholder is generated.",
 				Optional:    true,
+				Computed:    true,
 				Sensitive:   true,
 			},
 			"roles": schema.ListAttribute{
@@ -109,12 +122,88 @@ func (r *userResource) Configure(ctx context.Context, req resource.ConfigureRequ
 	r.client = client
 }
 
+func parseNamesFromUPN(upn string) (string, string) {
+	local := upn
+	if idx := strings.Index(upn, "@"); idx != -1 {
+		local = upn[:idx]
+	}
+	parts := strings.Split(local, ".")
+	if len(parts) >= 2 {
+		return strings.Title(parts[0]), strings.Title(parts[1])
+	}
+	if len(parts) == 1 && parts[0] != "" {
+		return strings.Title(parts[0]), "SSO"
+	}
+	return "SSO", "User"
+}
+
+func generateRandomPassword() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("SSO-AutoPwd-%x!", b)
+}
+
 func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan userResourceModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	upn := ""
+	if !plan.UPN.IsNull() && !plan.UPN.IsUnknown() {
+		upn = plan.UPN.ValueString()
+	}
+
+	username := ""
+	if !plan.Username.IsNull() && !plan.Username.IsUnknown() {
+		username = plan.Username.ValueString()
+	} else if upn != "" {
+		username = upn
+	}
+
+	if username == "" {
+		resp.Diagnostics.AddError(
+			"Missing Username or UPN",
+			"Either 'username' or 'upn' must be specified to create a superset_user.",
+		)
+		return
+	}
+
+	email := ""
+	if !plan.Email.IsNull() && !plan.Email.IsUnknown() {
+		email = plan.Email.ValueString()
+	} else if upn != "" {
+		email = upn
+	} else {
+		email = username + "@local"
+	}
+
+	firstName := ""
+	lastName := ""
+	if !plan.FirstName.IsNull() && !plan.FirstName.IsUnknown() {
+		firstName = plan.FirstName.ValueString()
+	}
+	if !plan.LastName.IsNull() && !plan.LastName.IsUnknown() {
+		lastName = plan.LastName.ValueString()
+	}
+
+	if firstName == "" || lastName == "" {
+		f, l := parseNamesFromUPN(username)
+		if firstName == "" {
+			firstName = f
+		}
+		if lastName == "" {
+			lastName = l
+		}
+	}
+
+	password := ""
+	if !plan.Password.IsNull() && !plan.Password.IsUnknown() {
+		password = plan.Password.ValueString()
+	} else {
+		password = generateRandomPassword()
 	}
 
 	var roleIDs []int64
@@ -126,16 +215,11 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		}
 	}
 
-	password := ""
-	if !plan.Password.IsNull() {
-		password = plan.Password.ValueString()
-	}
-
 	createReq := &client.CreateUserRequest{
-		Username:  plan.Username.ValueString(),
-		FirstName: plan.FirstName.ValueString(),
-		LastName:  plan.LastName.ValueString(),
-		Email:     plan.Email.ValueString(),
+		Username:  username,
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
 		Active:    plan.Active.ValueBool(),
 		Password:  password,
 		Roles:     roleIDs,
@@ -152,10 +236,16 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 
 	plan.ID = types.StringValue(strconv.FormatInt(user.ID, 10))
 	plan.Username = types.StringValue(user.Username)
+	if upn != "" {
+		plan.UPN = types.StringValue(upn)
+	} else {
+		plan.UPN = types.StringValue(user.Username)
+	}
 	plan.FirstName = types.StringValue(user.FirstName)
 	plan.LastName = types.StringValue(user.LastName)
 	plan.Email = types.StringValue(user.Email)
 	plan.Active = types.BoolValue(user.Active)
+	plan.Password = types.StringValue(password)
 
 	var currentRoleIDs []int64
 	for _, role := range user.Roles {
@@ -197,6 +287,9 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	}
 
 	state.Username = types.StringValue(user.Username)
+	if state.UPN.IsNull() || state.UPN.IsUnknown() {
+		state.UPN = types.StringValue(user.Username)
+	}
 	state.FirstName = types.StringValue(user.FirstName)
 	state.LastName = types.StringValue(user.LastName)
 	state.Email = types.StringValue(user.Email)

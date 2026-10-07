@@ -212,3 +212,146 @@ func TestRoleCRUD(t *testing.T) {
 		t.Fatalf("failed to delete role: %v", err)
 	}
 }
+
+func TestPermissionViewMenu(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/security/login":
+			_ = json.NewEncoder(w).Encode(LoginResponse{AccessToken: "token"})
+		case r.URL.Path == "/api/v1/security/permissions-resources/15":
+			_ = json.NewEncoder(w).Encode(PermissionViewMenuResponse{
+				Result: PermissionViewMenu{
+					ID:         15,
+					Permission: NamedEntity{ID: 1, Name: "can_read"},
+					ViewMenu:   NamedEntity{ID: 2, Name: "Dashboard"},
+				},
+			})
+		case r.URL.Path == "/api/v1/security/permissions-resources/":
+			_ = json.NewEncoder(w).Encode(PermissionViewMenuListResponse{
+				Count: 1,
+				Result: []PermissionViewMenu{
+					{
+						ID:         15,
+						Permission: NamedEntity{ID: 1, Name: "can_read"},
+						ViewMenu:   NamedEntity{ID: 2, Name: "Dashboard"},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	c, err := NewClient(ts.URL, "admin", "admin", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx := context.Background()
+
+	pvm, err := c.GetPermissionViewMenu(ctx, "can_read", "Dashboard")
+	if err != nil {
+		t.Fatalf("failed to get permission view menu: %v", err)
+	}
+	if pvm.ID != 15 {
+		t.Errorf("expected ID 15, got %d", pvm.ID)
+	}
+
+	pvmByID, err := c.GetPermissionViewMenuByID(ctx, 15)
+	if err != nil {
+		t.Fatalf("failed to get permission view menu by ID: %v", err)
+	}
+	if pvmByID.Permission.Name != "can_read" {
+		t.Errorf("expected 'can_read', got '%s'", pvmByID.Permission.Name)
+	}
+}
+
+func TestRLSCRUD(t *testing.T) {
+	rlsDB := map[int64]RowLevelSecurityRule{
+		10: {
+			ID:          10,
+			Name:        "APAC Only",
+			FilterType:  "Regular",
+			Clause:      "country = 'VN'",
+			Tables:      []TableRef{{ID: 1, TableName: "sales"}},
+			Roles:       []RoleRef{{ID: 2, Name: "Sales_VN"}},
+			Description: "Filter Vietnam sales",
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/security/login":
+			_ = json.NewEncoder(w).Encode(LoginResponse{AccessToken: "token"})
+		case r.URL.Path == "/api/v1/security/csrf_token/":
+			_ = json.NewEncoder(w).Encode(CSRFResponse{Result: "csrf"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/rowlevelsecurity/10":
+			_ = json.NewEncoder(w).Encode(RLSResponse{Result: rlsDB[10]})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/rowlevelsecurity/":
+			var req CreateRLSRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			newRLS := RowLevelSecurityRule{
+				ID:          11,
+				Name:        req.Name,
+				FilterType:  req.FilterType,
+				Clause:      req.Clause,
+				Description: req.Description,
+			}
+			rlsDB[11] = newRLS
+			_ = json.NewEncoder(w).Encode(struct {
+				ID     int64                `json:"id"`
+				Result RowLevelSecurityRule `json:"result"`
+			}{ID: 11, Result: newRLS})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/rowlevelsecurity/11":
+			_ = json.NewEncoder(w).Encode(RLSResponse{Result: rlsDB[11]})
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/rowlevelsecurity/11":
+			delete(rlsDB, 11)
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	c, err := NewClient(ts.URL, "admin", "admin", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Get RLS
+	rule, err := c.GetRLS(ctx, 10)
+	if err != nil {
+		t.Fatalf("failed to get RLS: %v", err)
+	}
+	if rule.Clause != "country = 'VN'" {
+		t.Errorf("expected clause 'country = \\'VN\\'', got '%s'", rule.Clause)
+	}
+
+	// Create RLS
+	created, err := c.CreateRLS(ctx, &CreateRLSRequest{
+		Name:        "EMEA Filter",
+		FilterType:  "Regular",
+		Clause:      "region = 'EMEA'",
+		Tables:      []int64{1},
+		Roles:       []int64{3},
+		Description: "EMEA region data",
+	})
+	if err != nil {
+		t.Fatalf("failed to create RLS: %v", err)
+	}
+	if created.Name != "EMEA Filter" {
+		t.Errorf("expected name 'EMEA Filter', got '%s'", created.Name)
+	}
+
+	// Delete RLS
+	if err := c.DeleteRLS(ctx, 11); err != nil {
+		t.Fatalf("failed to delete RLS: %v", err)
+	}
+}
+
+
