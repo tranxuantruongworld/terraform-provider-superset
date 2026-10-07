@@ -1,0 +1,26 @@
+# Binaries
+terraform-provider-superset
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Terraform runtime files
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfstate.*
+crash.log
+
+# Go build / test artifacts
+*.test
+*.out
+/scratch/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
