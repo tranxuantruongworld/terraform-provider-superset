@@ -75,11 +75,12 @@ resource "superset_row_level_security" "vn_finance_filter" {
 # ==============================================================================
 # QUẢN LÝ USER VỚI SSO / UPN (Azure AD, GitLab, Vault, Keycloak)
 # ==============================================================================
-# Người dùng chỉ cần khai báo UPN, hệ thống tự động:
-# 1. Trích xuất username = UPN
-# 2. Email = UPN
-# 3. Tự tạo mật khẩu tạm thời ngẫu nhiên (vì xác thực ủy quyền qua SSO/OIDC)
-# 4. Phân quyền sẵn các Role khi user đăng nhập SSO lần đầu tiên
+# Mapping định danh (Account Pre-linking) chỉ bằng UPN:
+# 1. username = UPN (khớp với claim IdP gửi về khi user đăng nhập)
+# 2. email = UPN
+# 3. Mật khẩu: User xác thực 100% qua SSO IdP Token, hoàn toàn không dùng mật khẩu DB.
+#    (Provider tự xử lý bên dưới để thỏa mãn ràng buộc schema của REST API Superset).
+# 4. Phân quyền sẵn Role & RLS ngay khi user đăng nhập SSO lần đầu tiên.
 resource "superset_user" "sso_analyst" {
   upn = "nguyen.van.a@company.com"
 
