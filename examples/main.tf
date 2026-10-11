@@ -14,32 +14,32 @@ provider "superset" {
 }
 
 # ==============================================================================
-# FEATURE 4: TRUY VẤN PERMISSIONS CÓ SẴN (Permission View Menus - PVM)
+# FEATURE: QUERY EXISTING PERMISSIONS (Permission View Menus - PVM)
 # ==============================================================================
-# Truy vấn quyền đọc Dashboard
+# Query permission to read Dashboards
 data "superset_permission" "can_read_dashboard" {
   permission_name = "can_read"
-  view_menu_name   = "Dashboard"
+  view_menu_name  = "Dashboard"
 }
 
-# Truy vấn quyền truy cập tất cả datasources (hoặc theo schema/database cụ thể)
+# Query permission to access all datasources (or specify schema/database)
 data "superset_permission" "all_datasource_access" {
   permission_name = "all_datasource_access"
-  view_menu_name   = "all_datasource_access"
+  view_menu_name  = "all_datasource_access"
 }
 
-# Truy vấn role Gamma mặc định của Superset
+# Query default Gamma role in Superset
 data "superset_role" "gamma" {
   name = "Gamma"
 }
 
 # ==============================================================================
-# FEATURE 1: TẠO ROLE VÀ GÁN PERMISSIONS CHI TIẾT
+# FEATURE: CREATE ROLES AND ASSIGN GRANULAR PERMISSIONS
 # ==============================================================================
 resource "superset_role" "finance_analyst" {
   name = "Finance_Analyst"
 
-  # Gán danh sách permission IDs trực tiếp vào Role
+  # Assign list of permission IDs directly to Role
   permissions = [
     data.superset_permission.can_read_dashboard.id,
     data.superset_permission.all_datasource_access.id,
@@ -54,35 +54,35 @@ resource "superset_role" "data_engineer" {
 }
 
 # ==============================================================================
-# FEATURE 2: ROW-LEVEL SECURITY (RLS) - PHÂN QUYỀN TRUY CẬP THEO DÒNG DỮ LIỆU
+# FEATURE: ROW-LEVEL SECURITY (RLS) - DATA ACCESS CONTROL BY ROW
 # ==============================================================================
-# Luật RLS: Chỉ cho phép người dùng thuộc role Finance_Analyst xem các dòng của Việt Nam
+# RLS rule: Only allow Finance_Analyst role to view rows for Vietnam
 resource "superset_row_level_security" "vn_finance_filter" {
   name        = "VN_Finance_Data_Only"
-  description = "Chi xem du lieu doanh thu tai Viet Nam cho Finance Analyst"
-  filter_type = "Regular" # Regular: ap dung cho roles duoc chi dinh; Base: ap dung cho tat ca tru roles duoc chi dinh
+  description = "Filter revenue data for Vietnam finance analysts"
+  filter_type = "Regular" # Regular: applies to specified roles; Base: applies to all except specified roles
   clause      = "country = 'VN' AND department = 'finance'"
 
-  # ID cua bang / dataset trong Superset
+  # Dataset / Table ID in Superset
   tables = [1]
 
-  # Gán luật RLS này vào role Finance_Analyst
+  # Associate this RLS rule with Finance_Analyst role
   roles = [
     superset_role.finance_analyst.id,
   ]
 }
 
 # ==============================================================================
-# QUẢN LÝ USER VỚI SSO / UPN (Azure AD, GitLab, Vault, Keycloak)
+# USER MANAGEMENT WITH SSO / UPN (Azure AD, GitLab, Vault, Keycloak)
 # ==============================================================================
-# Mapping định danh (Account Pre-linking) chỉ bằng UPN:
-# 1. username = UPN (khớp với claim IdP gửi về khi user đăng nhập)
+# Identity Mapping (Account Pre-linking) using UPN:
+# 1. username = UPN (matches claim sent by IdP upon user login)
 # 2. email = UPN
-# 3. Mật khẩu: User xác thực 100% qua SSO IdP Token, hoàn toàn không dùng mật khẩu DB.
-#    (Provider tự xử lý bên dưới để thỏa mãn ràng buộc schema của REST API Superset).
-# 4. Phân quyền sẵn Role & RLS ngay khi user đăng nhập SSO lần đầu tiên.
+# 3. Password: User authenticates 100% via SSO IdP Token, bypassing DB local passwords.
+#    (Provider handles schema requirements internally for Superset REST API).
+# 4. Pre-assign Roles & RLS so permissions apply immediately upon first SSO login.
 resource "superset_user" "sso_analyst" {
-  upn = "nguyen.van.a@company.com"
+  upn = "analyst.user@company.com"
 
   roles = [
     data.superset_role.gamma.id,
@@ -98,7 +98,7 @@ resource "superset_user" "sso_engineer" {
   ]
 }
 
-# User tạo truyền thống (Local Database User)
+# Traditional Local Database User
 resource "superset_user" "local_admin_backup" {
   username   = "backup_admin"
   first_name = "Backup"

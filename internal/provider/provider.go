@@ -136,4 +136,3 @@ func (p *SupersetProvider) DataSources(ctx context.Context) []func() datasource.
 		NewPermissionDataSource,
 	}
 }
-

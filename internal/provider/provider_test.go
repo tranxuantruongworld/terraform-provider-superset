@@ -41,4 +41,3 @@ func TestProviderResourcesAndDataSources(t *testing.T) {
 		t.Errorf("expected 3 data sources, got %d", len(dataSources))
 	}
 }
-

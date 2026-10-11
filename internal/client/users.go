@@ -79,4 +79,3 @@ func (c *Client) DeleteUser(ctx context.Context, id int64) error {
 	path := fmt.Sprintf("/api/v1/security/users/%d", id)
 	return c.Request(ctx, "DELETE", path, nil, nil)
 }
-

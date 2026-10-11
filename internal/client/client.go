@@ -210,4 +210,3 @@ func (c *Client) execute(ctx context.Context, method, path string, body interfac
 
 	return nil
 }
-

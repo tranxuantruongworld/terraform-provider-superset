@@ -353,5 +353,3 @@ func TestRLSCRUD(t *testing.T) {
 		t.Fatalf("failed to delete RLS: %v", err)
 	}
 }
-
-

@@ -108,4 +108,3 @@ func (d *roleDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	diags = resp.State.Set(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 }
-

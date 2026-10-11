@@ -78,4 +78,3 @@ func (c *Client) DeleteRole(ctx context.Context, id int64) error {
 	path := fmt.Sprintf("/api/v1/security/roles/%d", id)
 	return c.Request(ctx, "DELETE", path, nil, nil)
 }
-
