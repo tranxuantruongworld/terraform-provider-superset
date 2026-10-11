@@ -6,3 +6,4 @@ resource "superset_row_level_security" "vn_filter" {
   tables      = [1]
   roles       = [superset_role.analyst.id]
 }
+

@@ -14,3 +14,4 @@ resource "superset_user" "local_admin" {
   active     = true
   roles      = [superset_role.analyst.id]
 }
+

@@ -4,3 +4,4 @@ resource "superset_role" "analyst" {
     data.superset_permission.can_read_dashboard.id,
   ]
 }
+
